@@ -1,65 +1,54 @@
-import mongodb from 'mongodb';
-import Collection from 'mongodb/lib/collection';
-import envLoader from './env_loader';
+import { MongoClient } from 'mongodb';
 
-/**
- * MongoDB client rep
- */
+const HOST = process.env.DB_HOST || 'localhost';
+const PORT = process.env.DB_PORT || 27017;
+const DATABASE = process.env.DB_DATABASE || 'files_manager';
+const url = `mongodb://${HOST}:${PORT}`;
+
 class DBClient {
-  /**
-   * Creates new instance.
-   */
   constructor() {
-    envLoader();
-    const host = process.env.DB_HOST || 'localhost';
-    const port = process.env.DB_PORT || 27017;
-    const database = process.env.DB_DATABASE || 'files_manager';
-    const dbURL = `mongodb://${host}:${port}/${database}`;
-
-    this.client = new mongodb.MongoClient(dbURL, { useUnifiedTopology: true });
-    this.client.connect();
+    this.client = new MongoClient(url, { useUnifiedTopology: true, useNewUrlParser: true });
+    this.db = null;
+    this.connectionPromise = this.connect();
   }
 
-  /**
-   * Checks client's connection to the MongoDB server whether active.
-   * @returns {boolean}
-   */
-  isAlive() {
-    return this.client.isConnected();
+  async connect() {
+    try {
+      await this.client.connect();
+      this.db = this.client.db(DATABASE);
+      console.log('Connected successfully to MongoDB server');
+    } catch (err) {
+      console.error('Failed to connect to MongoDB:', err.message);
+    }
   }
 
-  /**
-   * Retrieves the number of users.
-   * @returns {Promise<Number>}
-   */
+  async isAlive() {
+    try {
+      await this.connectionPromise;
+      return this.client.isConnected();
+    } catch (err) {
+      return false;
+    }
+  }
+
   async nbUsers() {
-    return this.client.db().collection('users').countDocuments();
+    await this.connectionPromise;
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    const users = this.db.collection('users');
+    return users.countDocuments();
   }
 
-  /**
-   * Retrieves the number of files.
-   * @returns {Promise<Number>}
-   */
   async nbFiles() {
-    return this.client.db().collection('files').countDocuments();
-  }
-
-  /**
-   * Retrieves a reference to the `users` collection.
-   * @returns {Promise<Collection>}
-   */
-  async usersCollection() {
-    return this.client.db().collection('users');
-  }
-
-  /**
-   * Retrieves a reference to the `files` collection.
-   * @returns {Promise<Collection>}
-   */
-  async filesCollection() {
-    return this.client.db().collection('files');
+    await this.connectionPromise;
+    if (!this.db) {
+      throw new Error('Database not initialized');
+    }
+    const files = this.db.collection('files');
+    return files.countDocuments();
   }
 }
 
-export const dbClient = new DBClient();
+const dbClient = new DBClient();
 export default dbClient;
